@@ -891,8 +891,8 @@ if test "x$enable_redis" != "xno" && test "x$with_redis" != "no"; then
 		PKG_CHECK_EXISTS(hiredis, [hiredis=yes], [hiredis=no])		
 		if test "x$hiredis" = "xyes"; then
 			AC_MSG_RESULT(yes)
-			HIREDIS_CFLAGS="`hiredis-config --cflags`"
-			HIREDIS_LIBS="`hiredis-config --libs`"
+			HIREDIS_CFLAGS="`pkg-config --cflags hiredis`"
+			HIREDIS_LIBS="`pkg-config --libs hiredis`"
 		else
 			AC_MSG_RESULT(no)
 			hiredis=no
