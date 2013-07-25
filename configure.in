@@ -873,7 +873,7 @@ dnl ***************************************************************************
 dnl libhiredis headers/libraries
 dnl ***************************************************************************
 if test "x$enable_redis" != "xno" && test "x$with_redis" != "no"; then
-	redis="yes"
+	hiredis="yes"
 	if test "x$with_libhiredis" != "yes" && test "x$with_libhiredis" != "x"; then
 		#CPPFLAGS_SAVE="$CPPFLAGS"
 		CFLAGS_SAVE="$CFLAGS"
@@ -902,7 +902,7 @@ if test "x$enable_redis" != "xno" && test "x$with_redis" != "no"; then
 		AC_MSG_ERROR(libHIREDIS not found)
 	fi		
 	
-	enable_redis=$redis
+	enable_redis=$hiredis
 fi
 
 dnl ***************************************************************************
