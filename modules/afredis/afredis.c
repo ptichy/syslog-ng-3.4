@@ -716,7 +716,7 @@ afredis_module_init(GlobalConfig *cfg, CfgArgs *args)
     reply = redisCommand(c,"PING");
     printf("PING: %s\n", reply->str);
     
-   reply = redisCommand(c,"SET %s %s", "init", "proba");
+   reply = redisCommand(c,"SET %s %s", "testkey", "testmessage");
     freeReplyObject(reply);
   return TRUE;
 }
