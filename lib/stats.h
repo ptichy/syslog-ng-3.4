@@ -72,6 +72,7 @@ enum
   SCS_SENDER         = 26,
   SCS_SMTP           = 27,
   SCS_AMQP           = 28,
+  SCS_REDIS	     = 29,
   SCS_MAX,
   SCS_SOURCE_MASK    = 0xff
 };
