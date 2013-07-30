@@ -870,28 +870,39 @@ if test "x$enable_smtp" != "xno" && test "x$with_libesmtp" != "no"; then
 fi
 
 dnl ***************************************************************************
-dnl redis headers/libraries
+dnl libhiredis headers/libraries
 dnl ***************************************************************************
 if test "x$enable_redis" != "xno" && test "x$with_redis" != "no"; then
-	redis="yes"
-	if test "x$with_redis" != "yes" && test "x$with_redis" != "x"; then
+	hiredis="yes"
+	if test "x$with_libhiredis" != "yes" && test "x$with_libhiredis" != "x"; then
 		#CPPFLAGS_SAVE="$CPPFLAGS"
 		CFLAGS_SAVE="$CFLAGS"
 		LDFLAGS_SAVE="$LDFLAGS"
-		#CPPFLAGS="$CPPFLAGS -I$with_libhiredis/include"
+		#CPPFLAGS="$CPPFLAGS -I$with_hiredis/include"
 		CFLAGS="$CFLAGS -I$with_libhiredis/include"
 		LDFLAGS="$LDFLAGS -L$with_libhiredis/lib"
-		AC_CHECK_HEADER(hiredis.h, [LIBHIREDIS_CFLAGS="-I$with_libhiredis/include"
-					     LIBHIREDIS_LIBS="-L$with_libhiredis/lib -lhiredis"], [libhiredis=no])
+		AC_CHECK_HEADER(hiredis.h, [HIREDIS_CFLAGS="-I$with_libhiredis/include"
+					     HIREDIS_LIBS="-L$with_libhiredis/lib -lhiredis"], [hiredis=no])
 		#CPPFLAGS="$CPPFLAGS_SAVE"
 		CFLAGS="$CFLAGS_SAVE"
 		LDFLAGS="$LDFLAGS_SAVE"
-	
+	else
+		AC_MSG_CHECKING(for libHIREDIS)
+		PKG_CHECK_EXISTS(hiredis, [hiredis=yes], [hiredis=no])		
+		if test "x$hiredis" = "xyes"; then
+			AC_MSG_RESULT(yes)
+			HIREDIS_CFLAGS="`pkg-config --cflags hiredis`"
+			HIREDIS_LIBS="`pkg-config --libs hiredis`"
+		else
+			AC_MSG_RESULT(no)
+			hiredis=no
+		fi	
 	fi
-	if test "x$enable_redis" = "xyes" && test "x$redis" = "xno"; then
+	if test "x$enable_redis" = "xyes" && test "x$hiredis" = "xno"; then
 		AC_MSG_ERROR(libHIREDIS not found)
-	fi
-	enable_redis=$redis
+	fi		
+	
+	enable_redis=$hiredis
 fi
 
 dnl ***************************************************************************
@@ -1220,6 +1231,8 @@ AC_SUBST(LIBMONGO_CFLAGS)
 AC_SUBST(LIBMONGO_SUBDIRS)
 AC_SUBST(LIBESMTP_CFLAGS)
 AC_SUBST(LIBESMTP_LIBS)
+AC_SUBST(HIREDIS_CFLAGS)
+AC_SUBST(HIREDIS_LIBS)
 AC_SUBST(LIBRABBITMQ_LIBS)
 AC_SUBST(LIBRABBITMQ_CFLAGS)
 AC_SUBST(LIBRABBITMQ_SUBDIRS)
