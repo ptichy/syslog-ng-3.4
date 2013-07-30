@@ -6,9 +6,9 @@ export top_srcdir
 if ENABLE_REDIS
 module_LTLIBRARIES = libafredis.la
 
-libafredis_la_CFLAGS = $(LIBHIREDIS_CFLAGS)
+libafredis_la_CFLAGS = $(HIREDIS_CFLAGS)
 libafredis_la_SOURCES = afredis-grammar.y afredis.c afredis.h afredis-parser.c afredis-parser.h
-libafredis_la_LIBADD = $(LIBHIREDIS_LIBS) $(MODULE_DEPS_LIBS)
+libafredis_la_LIBADD = $(HIREDIS_LIBS) $(MODULE_DEPS_LIBS)
 libafredis_la_LDFLAGS = $(MODULE_LDFLAGS)
 
 endif

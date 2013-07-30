@@ -26,27 +26,13 @@
 
 #include "driver.h"
 
-typedef enum
-  {
-    AFREDIS_RCPT_TYPE_NONE,
-    AFREDIS_RCPT_TYPE_TO,
-    AFREDIS_RCPT_TYPE_CC,
-    AFREDIS_RCPT_TYPE_BCC,
-    AFREDIS_RCPT_TYPE_REPLY_TO,
-    AFREDIS_RCPT_TYPE_SENDER,
-  } afredis_rcpt_type_t;
-
 LogDriver *afredis_dd_new(void);
 
 void afredis_dd_set_host(LogDriver *d, const gchar *host);
 void afredis_dd_set_port(LogDriver *d, gint port);
 
-void afredis_dd_set_subject(LogDriver *d, const gchar *subject);
-void afredis_dd_set_from(LogDriver *d, const gchar *phrase, const gchar *mbox);
-void afredis_dd_add_rcpt(LogDriver *d, afredis_rcpt_type_t type,
-                        const gchar *phrase, const gchar *mbox);
-void afredis_dd_set_body(LogDriver *d, const gchar *body);
-gboolean afredis_dd_add_header(LogDriver *d, const gchar *header,
-                              const gchar *value);
+//void afredis_dd_set_subject(LogDriver *d, const gchar *subject);
+
+void afredis_dd_set_value(LogDriver *d, const gchar *value);
 
 #endif

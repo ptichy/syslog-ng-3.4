@@ -191,16 +191,7 @@
      KW_REKEY = 10507,
      KW_ADD_PREFIX = 10508,
      KW_REPLACE = 10509,
-     KW_REDIS = 10511,
-     KW_SUBJECT = 10512,
-     KW_FROM = 10513,
-     KW_TO = 10514,
-     KW_BODY = 10515,
-     KW_HEADER = 10516,
-     KW_CC = 10517,
-     KW_BCC = 10518,
-     KW_SENDER = 10519,
-     KW_REPLY_TO = 10520
+     KW_REDIS = 10511
    };
 #endif
 /* Tokens.  */
@@ -346,15 +337,6 @@
 #define KW_ADD_PREFIX 10508
 #define KW_REPLACE 10509
 #define KW_REDIS 10511
-#define KW_SUBJECT 10512
-#define KW_FROM 10513
-#define KW_TO 10514
-#define KW_BODY 10515
-#define KW_HEADER 10516
-#define KW_CC 10517
-#define KW_BCC 10518
-#define KW_SENDER 10519
-#define KW_REPLY_TO 10520
 
 
 

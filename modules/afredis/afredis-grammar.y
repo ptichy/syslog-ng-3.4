@@ -335,15 +335,8 @@ extern LogDriver *last_driver;
 
 
 %token KW_REDIS
-%token KW_SUBJECT
-%token KW_FROM
-%token KW_TO
-%token KW_BODY
-%token KW_HEADER
-%token KW_CC
-%token KW_BCC
-%token KW_SENDER
-%token KW_REPLY_TO
+%token KW_KEY
+%token KW_VALUE
 
 %%
 
@@ -363,25 +356,9 @@ afredis_options
 afredis_option
         : KW_HOST '(' string ')'		{ afredis_dd_set_host(last_driver, $3); free($3); }
         | KW_PORT '(' LL_NUMBER ')'		{ afredis_dd_set_port(last_driver, $3); }
-	| KW_SUBJECT '(' string ')'	 	{ afredis_dd_set_subject(last_driver, $3); free($3); }
-	| KW_BODY '(' string ')'		{ afredis_dd_set_body(last_driver, $3); free($3); }
-	| KW_HEADER '(' string string ')'	{
-		afredis_dd_add_header(last_driver, $3, $4);
-		free($3); free($4);
-	}
+	//| KW_KEY '(' string ')'		 	{ afredis_dd_set_subject(last_driver, $3); free($3); }
+	| KW_VALUE '(' string ')'		{ afredis_dd_set_value(last_driver, $3); free($3); }		
 
-	| KW_FROM '(' string ')'		{ afredis_dd_set_from(last_driver, $3, $3); free($3); }
-	| KW_FROM '(' string string ')'		{ afredis_dd_set_from(last_driver, $3, $4); free($3); free($4); }
-	| KW_SENDER '(' string ')'		{ afredis_dd_set_from(last_driver, $3, $3); free($3); }
-	| KW_SENDER '(' string string ')'	{ afredis_dd_set_from(last_driver, $3, $4); free($3); free($4); }
-	| KW_TO '(' string ')'			{ afredis_dd_add_rcpt(last_driver, AFREDIS_RCPT_TYPE_TO, $3, $3); free($3); }
-	| KW_TO '(' string string ')'		{ afredis_dd_add_rcpt(last_driver, AFREDIS_RCPT_TYPE_TO, $3, $4); free($3); free($4); }
-	| KW_CC '(' string ')'			{ afredis_dd_add_rcpt(last_driver, AFREDIS_RCPT_TYPE_CC, $3, $3); free($3); }
-	| KW_CC '(' string string ')'		{ afredis_dd_add_rcpt(last_driver, AFREDIS_RCPT_TYPE_CC, $3, $4); free($3); free($4); }
-	| KW_BCC '(' string ')'			{ afredis_dd_add_rcpt(last_driver, AFREDIS_RCPT_TYPE_BCC, $3, $3); free($3); }
-	| KW_BCC '(' string string ')'		{ afredis_dd_add_rcpt(last_driver, AFREDIS_RCPT_TYPE_BCC, $3, $4); free($3); free($4); }
-	| KW_REPLY_TO '(' string ')'		{ afredis_dd_add_rcpt(last_driver, AFREDIS_RCPT_TYPE_REPLY_TO, $3, $3); free($3); }
-	| KW_REPLY_TO '(' string string ')'	{ afredis_dd_add_rcpt(last_driver, AFREDIS_RCPT_TYPE_REPLY_TO, $3, $4); free($3); free($4); }
         | dest_driver_option
         ;
 

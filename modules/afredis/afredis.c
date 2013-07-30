@@ -31,9 +31,9 @@
 #include "stats.h"
 #include "logqueue.h"
 
-#include <hiredis/hiredis.h>
+#include "hiredis/hiredis.h"
 #include "driver.h"
-
+static int smsgcounter = 0;
 typedef struct
 {
   gchar *name;
@@ -41,12 +41,6 @@ typedef struct
   LogTemplate *value;
 } AFREDISHeader;
 
-typedef struct
-{
-  gchar *phrase;
-  gchar *address;
-  afredis_rcpt_type_t type;
-} AFREDISRecipient;
 
 typedef struct
 {
@@ -56,20 +50,21 @@ typedef struct
      written */
   gchar *host;
   gint port;
-
-  gchar *subject;
-  AFREDISRecipient *mail_from;
+  
+  redisContext *c;  
+  
   GList *rcpt_tos;
-  GList *headers;
-  gchar *body;
+    
+  gchar *key;
+  gchar *value;
 
   time_t time_reopen;
 
   StatsCounterItem *dropped_messages;
   StatsCounterItem *stored_messages;
-
-  LogTemplate *subject_tmpl;
-  LogTemplate *body_tmpl;
+  
+  LogTemplate *key_tmpl;
+  LogTemplate *value_tmpl;
 
   /* Thread related stuff; shared */
   GThread *writer_thread;
@@ -108,7 +103,7 @@ void
 afredis_dd_set_host(LogDriver *d, const gchar *host)
 {   
   AFREDISDriver *self = (AFREDISDriver *)d;
-
+    
   g_free(self->host);
   self->host = g_strdup (host);
 }
@@ -121,41 +116,15 @@ afredis_dd_set_port(LogDriver *d, gint port)
   self->port = (int)port;
 }
 
-void
-afredis_dd_set_subject(LogDriver *d, const gchar *subject)
+void afredis_dd_set_value(LogDriver *d, const gchar *value)
 {
   AFREDISDriver *self = (AFREDISDriver *)d;
 
-  g_free(self->subject);
-  self->subject = g_strdup(subject);
+  g_free(self->value);
+  self->value = g_strdup(value);
 }
 
-void
-afredis_dd_set_from(LogDriver *d, const gchar *phrase, const gchar *mbox)
-{
-  AFREDISDriver *self = (AFREDISDriver *)d;
-
-  g_free(self->mail_from->phrase);
-  g_free(self->mail_from->address);
-  self->mail_from->phrase = afredis_wash_string(g_strdup(phrase));
-  self->mail_from->address = afredis_wash_string(g_strdup(mbox));
-}
-
-void
-afredis_dd_add_rcpt(LogDriver *d, afredis_rcpt_type_t type, const gchar *phrase,
-                   const gchar *mbox)
-{
-  AFREDISDriver *self = (AFREDISDriver *)d;
-  AFREDISRecipient *rcpt;
-
-  rcpt = g_new0(AFREDISRecipient, 1);
-  rcpt->phrase = afredis_wash_string(g_strdup(phrase));
-  rcpt->address = afredis_wash_string(g_strdup(mbox));
-  rcpt->type = type;
-
-  self->rcpt_tos = g_list_append(self->rcpt_tos, rcpt);
-}
-
+/*
 void
 afredis_dd_set_body(LogDriver *d, const gchar *body)
 {
@@ -163,45 +132,11 @@ afredis_dd_set_body(LogDriver *d, const gchar *body)
 
   g_free(self->body);
   self->body = g_strdup(body);
-}
-
-gboolean
-afredis_dd_add_header(LogDriver *d, const gchar *header, const gchar *value)
-{
-  AFREDISDriver *self = (AFREDISDriver *)d;
-  AFREDISHeader *h;
-
-  if (!g_ascii_strcasecmp(header, "to") ||
-      !g_ascii_strcasecmp(header, "cc") ||
-      !g_ascii_strcasecmp(header, "bcc") ||
-      !g_ascii_strcasecmp(header, "from") ||
-      !g_ascii_strcasecmp(header, "sender") ||
-      !g_ascii_strcasecmp(header, "reply-to") ||
-      !g_ascii_strcasecmp(header, "date"))
-    return FALSE;
-
-  h = g_new0(AFREDISHeader, 1);
-  h->name = g_strdup(header);
-  h->template = g_strdup(value);
-
-  self->headers = g_list_append(self->headers, h);
-
-  return TRUE;
-}
+}*/
 
 /*
  * Utilities
  */ 
-void
-ignore_sigpipe (void)
-{
-  struct sigaction sa;
-
-  sa.sa_handler = SIG_IGN;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = 0;
-  sigaction(SIGPIPE, &sa, NULL);
-}
 
 static gchar *
 afredis_dd_format_stats_instance(AFREDISDriver *self)
@@ -224,117 +159,7 @@ afredis_dd_suspend(AFREDISDriver *self)
 
 /*
  * Worker thread
- */ /*
-static void
-afredis_dd_msg_add_recipient(AFREDISRecipient *rcpt, redis_message_t message)
-{
-  gchar *hdr;
-
-  redis_add_recipient(message, rcpt->address);
-
-  switch (rcpt->type)
-    {
-    case AFREDIS_RCPT_TYPE_TO:
-      hdr = "To";
-      break;
-    case AFREDIS_RCPT_TYPE_CC:
-      hdr = "Cc";
-      break;
-    case AFREDIS_RCPT_TYPE_REPLY_TO:
-      hdr = "Reply-To";
-      break;
-    default:
-      return;
-    }
-  redis_set_header(message, hdr, rcpt->phrase, rcpt->address);
-  redis_set_header_option(message, hdr, Hdr_OVERRIDE, 1);
-}
-
-static void
-afredis_dd_msg_add_header(AFREDISHeader *hdr, gpointer user_data)
-{
-  AFREDISDriver *self = ((gpointer *)user_data)[0];
-  LogMessage *msg = ((gpointer *)user_data)[1];
-  redis_message_t message = ((gpointer *)user_data)[2];
-
-  log_template_format(hdr->value, msg, NULL, LTZ_SEND, self->seq_num, NULL, self->str);
-
-  redis_set_header(message, hdr->name, afredis_wash_string (self->str->str), NULL);
-  redis_set_header_option(message, hdr->name, Hdr_OVERRIDE, 1);
-}
-
-static void
-afredis_dd_log_rcpt_status(redis_recipient_t rcpt, const char *mailbox,
-                          gpointer user_data)
-{
-  const redis_status_t *status;
-
-  status = redis_recipient_status(rcpt);
-  msg_debug("REDIS recipient result",
-            evt_tag_str("recipient", mailbox),
-            evt_tag_int("code", status->code),
-            evt_tag_str("text", status->text),
-            NULL);
-}
-
-static void
-afredis_dd_cb_event(redis_session_t session, int event, AFREDISDriver *self)
-{
-  switch (event)
-    {
-    case REDIS_EV_CONNECT:
-      msg_verbose("Connected to REDIS server",
-                  evt_tag_str("host", self->host),
-                  evt_tag_int("port", self->port),
-                  NULL);
-      break;
-    case REDIS_EV_MAILSTATUS:
-    case REDIS_EV_RCPTSTATUS:
-    case REDIS_EV_MESSAGEDATA:
-    case REDIS_EV_MESSAGESENT:
-      /* Ignore */ 
-     // break; 
-   /* case REDIS_EV_DISCONNECT:
-      msg_verbose("Disconnected from REDIS server",
-                  evt_tag_str("host", self->host),
-                  evt_tag_int("port", self->port),
-                  NULL);
-      break;
-    default:
-      msg_verbose("Unknown REDIS event",
-                  evt_tag_int("event_id", event),
-                  NULL);
-      break;
-    }
-}
-
-static void
-afredis_dd_cb_monitor(const gchar *buf, gint buflen, gint writing,
-                     AFREDISDriver *self)
-{
-  gchar fmt[32];
-
-  g_snprintf(fmt, sizeof(fmt), "%%.%us", buflen);
-
-  switch (writing)
-    {
-    case REDIS_CB_READING:
-      msg_debug ("REDIS Session: SERVER",
-                 evt_tag_printf("message", fmt, buf),
-                 NULL);
-      break;
-    case REDIS_CB_WRITING:
-      msg_debug("REDIS Session: CLIENT",
-                evt_tag_printf("message", fmt, buf),
-                NULL);
-      break;
-    case REDIS_CB_HEADERS:
-      msg_debug("REDIS Session: HEADERS",
-                evt_tag_printf("data", fmt, buf),
-                NULL);
-      break;
-    }
-}
+ */ 
 
 static gboolean
 afredis_worker_insert(AFREDISDriver *self)
@@ -342,8 +167,8 @@ afredis_worker_insert(AFREDISDriver *self)
   gboolean success;
   LogMessage *msg;
   LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
-  redis_session_t session;
-  redis_message_t message;
+  redisReply *reply;
+  
   gpointer args[] = { self, NULL, NULL };
 
   success = log_queue_pop_head(self->queue, &msg, &path_options, FALSE, FALSE);
@@ -352,68 +177,47 @@ afredis_worker_insert(AFREDISDriver *self)
 
   msg_set_context(msg);
 
-  session = redis_create_session();
-  message = redis_add_message(session);
-
   g_string_printf(self->str, "%s:%d", self->host, self->port);
-  redis_set_server(session, self->str->str);
-
-  redis_set_eventcb(session, (redis_eventcb_t)afredis_dd_cb_event, (void *)self);
-  redis_set_monitorcb(session, (redis_monitorcb_t)afredis_dd_cb_monitor,
-                     (void *)self, 1);
-
-  redis_set_reverse_path(message, self->mail_from->address);
-
-  /* Defaults */  /*
-  redis_set_header(message, "To", NULL, NULL);
-  redis_set_header(message, "From", NULL, NULL);
-
-  log_template_format(self->subject_tmpl, msg, NULL, LTZ_SEND,
+  
+  /* Defaults */  
+  //log_template_format(self->key_tmpl, msg, NULL, LTZ_SEND, self->seq_num, NULL, self->str);
+  log_template_format(self->value_tmpl, msg, NULL, LTZ_SEND,
                       self->seq_num, NULL, self->str);
-  redis_set_header(message, "Subject", afredis_wash_string(self->str->str));
-  redis_set_header_option(message, "Subject", Hdr_OVERRIDE, 1);
-
-  /* Add recipients */  /*
-  g_list_foreach(self->rcpt_tos, (GFunc)afredis_dd_msg_add_recipient, message);
-
-  /* Add custom header (overrides anything set before, or in the
-     body). */ /*
-  args[1] = msg;
-  args[2] = message;
-  g_list_foreach(self->headers, (GFunc)afredis_dd_msg_add_header, args);
-
+    
   /* Set the body.
    *
    * We add a header to the body, otherwise libesmtp will not
    * recognise headers, and will append them to the end of the body.
-   */ /*
-  g_string_assign(self->str, "X-Mailer: syslog-ng " VERSION "\r\n\r\n");
-  log_template_append_format(self->body_tmpl, msg, NULL, LTZ_SEND,
-                             self->seq_num, NULL, self->str);
-  redis_set_message_str(message, self->str->str);
+   */ 
 
-  if (!redis_start_session(session))
-    {
-      gchar error[1024];
-      redis_strerror(redis_errno(), error, sizeof (error) - 1);
-
+/*  log_template_append_format(self->body_tmpl, msg, NULL, LTZ_SEND,
+                             self->seq_num, NULL, self->str); */
+  if  ( smsgcounter < 500 ) smsgcounter++;
+  
+  
+  self->c = redisConnect(self->host, self->port);
+    
+  if (self->c->err)
+    {            
       msg_error("REDIS server error, suspending",
-                evt_tag_str("error", error),
+                evt_tag_str("error", self->c->err),
                 evt_tag_int("time_reopen", self->time_reopen),
                 NULL);
       success = FALSE;
     }
   else
-    {
-      const redis_status_t *status = redis_message_transfer_status(message);
+    {      
       msg_debug("REDIS result",
-                evt_tag_int("code", status->code),
-                evt_tag_str("text", status->text),
-                NULL);
-      redis_enumerate_recipients(message, afredis_dd_log_rcpt_status, NULL);
+                //evt_tag_int("code", status->code),
+                evt_tag_str("text", self->c->errstr),
+                NULL);      
     }
-  redis_destroy_session(session);
-
+  //redis_destroy_session(session);
+  
+  reply = redisCommand(self->c,"SET %s%d %s", "message", smsgcounter, "testmsg");
+  reply = redisCommand(self->c,"SET %s%d %s", "msgvalue", smsgcounter, self->str);
+  freeReplyObject(reply);
+  
   msg_set_context(NULL);
 
   if (success)
@@ -452,8 +256,7 @@ afredis_worker_thread(gpointer arg)
 
   self->str = g_string_sized_new(1024);
 
-  ignore_sigpipe();
-
+  
   while (!self->writer_thread_terminate)
     {
       g_mutex_lock(self->suspend_mutex);
@@ -496,7 +299,7 @@ afredis_worker_thread(gpointer arg)
 /*
  * Main thread
  */
-/*
+
 static void
 afredis_dd_start_thread(AFREDISDriver *self)
 {
@@ -512,7 +315,7 @@ afredis_dd_stop_thread(AFREDISDriver *self)
   g_mutex_unlock(self->suspend_mutex);
   g_thread_join(self->writer_thread);
 }
-
+/*
 static void
 afredis_dd_init_header(AFREDISHeader *hdr, GlobalConfig *cfg)
 {
@@ -522,7 +325,7 @@ afredis_dd_init_header(AFREDISHeader *hdr, GlobalConfig *cfg)
       log_template_compile(hdr->value, hdr->template, NULL);
     }
 }
-
+*/
 static gboolean
 afredis_dd_init(LogPipe *s)
 {
@@ -539,16 +342,17 @@ afredis_dd_init(LogPipe *s)
 
   self->queue = log_dest_driver_acquire_queue(&self->super, afredis_dd_format_stats_instance(self));
 
-  g_list_foreach(self->headers, (GFunc)afredis_dd_init_header, cfg);
-  if (!self->subject_tmpl)
+  //g_list_foreach(self->headers, (GFunc)afredis_dd_init_header, cfg);
+  if (!self->key_tmpl)
     {
-      self->subject_tmpl = log_template_new(cfg, "subject");
-      log_template_compile(self->subject_tmpl, self->subject, NULL);
+     // self->key_tmpl = log_template_new(cfg, "key");
+    //  log_template_compile(self->key_tmpl, self->key, NULL);
     }
-  if (!self->body_tmpl)
+  if ( !(self->value) ) self->value = "$MESSAGE";
+  if (!self->value_tmpl)
     {
-      self->body_tmpl = log_template_new(cfg, "body");
-      log_template_compile(self->body_tmpl, self->body, NULL);
+      self->value_tmpl = log_template_new(cfg, "value");
+      log_template_compile(self->value_tmpl, self->value, NULL);
     }
 
   stats_lock();
@@ -589,7 +393,7 @@ static void
 afredis_dd_free(LogPipe *d)
 {
   AFREDISDriver *self = (AFREDISDriver *)d;
-  GList *l;
+/*  GList *l;
 
   g_mutex_free(self->suspend_mutex);
   g_cond_free(self->writer_thread_wakeup_cond);
@@ -598,13 +402,11 @@ afredis_dd_free(LogPipe *d)
     log_queue_unref(self->queue);
 
   g_free(self->host);
-  g_free(self->mail_from->phrase);
-  g_free(self->mail_from->address);
-  g_free(self->mail_from);
-  log_template_unref(self->subject_tmpl);
-  log_template_unref(self->body_tmpl);
-  g_free(self->body);
-  g_free(self->subject);
+  
+  log_template_unref(self->key_tmpl);
+  log_template_unref(self->value_tmpl);
+  g_free(self->key);
+  g_free(self->value);
   g_string_free(self->str, TRUE);
 
   l = self->rcpt_tos;
@@ -627,7 +429,7 @@ afredis_dd_free(LogPipe *d)
       g_free(hdr);
       l = g_list_delete_link(l, l);
     }
-
+*/
   log_dest_driver_free(d);
 }
 
@@ -635,7 +437,8 @@ static void
 afredis_dd_queue(LogPipe *s, LogMessage *msg,
                 const LogPathOptions *path_options, gpointer user_data)
 {
-  AFREDISDriver *self = (AFREDISDriver *)s;
+  AFREDISDriver *self = (AFREDISDriver *)s;  
+  
   LogPathOptions local_options;
 
   if (!path_options->flow_control_requested)
@@ -644,13 +447,13 @@ afredis_dd_queue(LogPipe *s, LogMessage *msg,
   log_msg_add_ack(msg, path_options);
   log_queue_push_tail(self->queue, log_msg_ref(msg), path_options);
 
-  log_dest_driver_queue_method(s, msg, path_options, user_data);
+  log_dest_driver_queue_method(s, msg, path_options, user_data);  
 }
 
 /*
  * Plugin glue.
  */
-/*
+
 LogDriver *
 afredis_dd_new(void)
 {
@@ -663,10 +466,8 @@ afredis_dd_new(void)
   self->super.super.super.free_fn = afredis_dd_free;
 
   afredis_dd_set_host((LogDriver *)self, "127.0.0.1");
-  afredis_dd_set_port((LogDriver *)self, 25);
-
-  self->mail_from = g_new0(AFREDISRecipient, 1);
-
+  afredis_dd_set_port((LogDriver *)self, 6379);
+  
   init_sequence_number(&self->seq_num);
 
   self->writer_thread_wakeup_cond = g_cond_new();
@@ -674,7 +475,7 @@ afredis_dd_new(void)
 
   return (LogDriver *)self;
 }
-*/
+ 
 extern CfgParser afredis_dd_parser;
 
 static Plugin afredis_plugin =
@@ -686,8 +487,21 @@ static Plugin afredis_plugin =
 
 gboolean
 afredis_module_init(GlobalConfig *cfg, CfgArgs *args)
-{
-  plugin_register(cfg, &afredis_plugin, 1);
+{//writer thread-be
+  redisReply *reply;
+  redisContext *c;
+  plugin_register(cfg, &afredis_plugin, 1); 
+  c = redisConnect("127.0.0.1", 6379);
+    if (c->err)
+    {
+        printf("Connection error: %s\n", c->errstr);
+        exit(1);
+    }
+    reply = redisCommand(c,"PING");
+    printf("PING: %s\n", reply->str);
+    
+   reply = redisCommand(c,"SET %s %s", "testkey", "testmessage");
+    freeReplyObject(reply);
   return TRUE;
 }
 

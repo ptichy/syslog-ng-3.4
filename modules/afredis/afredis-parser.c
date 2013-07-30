@@ -32,15 +32,8 @@ static CfgLexerKeyword afredis_keywords[] = {
   { "redis",			KW_REDIS },
   { "host",			KW_HOST },
   { "port",			KW_PORT },
-  { "subject",			KW_SUBJECT },
-  { "from",			KW_FROM },
-  { "to",			KW_TO },
-  { "cc",			KW_CC },
-  { "bcc",			KW_BCC },
-  { "reply_to",			KW_REPLY_TO },
-  { "sender",			KW_SENDER },
-  { "body",			KW_BODY },
-  { "header",			KW_HEADER },
+  { "key",			KW_KEY },
+  { "value",			KW_VALUE },
   { NULL }
 };
 
