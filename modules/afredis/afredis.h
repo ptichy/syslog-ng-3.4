@@ -30,9 +30,7 @@ LogDriver *afredis_dd_new(void);
 
 void afredis_dd_set_host(LogDriver *d, const gchar *host);
 void afredis_dd_set_port(LogDriver *d, gint port);
-
-//void afredis_dd_set_subject(LogDriver *d, const gchar *subject);
-
+void afredis_dd_set_key(LogDriver *d, const gchar *key);
 void afredis_dd_set_value(LogDriver *d, const gchar *value);
 
 #endif

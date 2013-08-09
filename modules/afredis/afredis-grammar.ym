@@ -67,7 +67,7 @@ afredis_options
 afredis_option
         : KW_HOST '(' string ')'		{ afredis_dd_set_host(last_driver, $3); free($3); }
         | KW_PORT '(' LL_NUMBER ')'		{ afredis_dd_set_port(last_driver, $3); }
-	//| KW_KEY '(' string ')'		 	{ afredis_dd_set_subject(last_driver, $3); free($3); }
+	| KW_KEY '(' string ')'		 	{ afredis_dd_set_key(last_driver, $3); free($3); }
 	| KW_VALUE '(' string ')'		{ afredis_dd_set_value(last_driver, $3); free($3); }		
 
         | dest_driver_option
