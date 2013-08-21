@@ -150,6 +150,29 @@ afredis_dd_suspend(AFREDISDriver *self)
                  self->time_reopen * 1000000);
 }
 
+static gboolean
+afredis_dd_connect(AFREDISDriver *self, gboolean reconnect)
+{
+  self->c = redisConnect(self->host, self->port);
+  
+  if (reconnect && !(self->c->err))
+    return TRUE;  
+  
+  if (self->c->err)
+  {            
+    msg_error("REDIS server error, suspending",
+              evt_tag_str("error", self->c->errstr),
+              evt_tag_int("time_reopen", self->time_reopen),
+              NULL);
+    return FALSE;
+  }
+  else 
+    msg_debug("Connecting to REDIS succeeded",
+      evt_tag_str("driver", self->super.super.id), NULL);
+
+  return TRUE;
+}
+
 /*
  * Worker thread
  */ 
@@ -164,6 +187,8 @@ afredis_worker_insert(AFREDISDriver *self)
   
   gpointer args[] = { self, NULL, NULL };
 
+  afredis_dd_connect(self, TRUE);
+  
   success = log_queue_pop_head(self->queue, &msg, &path_options, FALSE, FALSE);
   if (!success)
     return TRUE;
@@ -179,27 +204,38 @@ afredis_worker_insert(AFREDISDriver *self)
   log_template_format(self->value_tmpl, msg, NULL, LTZ_SEND,
                              self->seq_num, NULL, self->value_str);
   
-  msgcounter++;  
-  
-  //self->c = redisConnect(self->host, self->port);
-    
+  msgcounter++;    
+      
   if (self->c->err)
-    {            
-      msg_error("REDIS server error, suspending",
-                evt_tag_str("error", self->c->err),
-                evt_tag_int("time_reopen", self->time_reopen),
-                NULL);
+    {          
       success = FALSE;
     }
   else
     { 
-      reply = redisCommand(self->c,"SET %s%d %s", self->key_str->str, msgcounter, self->value_str->str);  
-      freeReplyObject(reply);
+      reply = redisCommand(self->c,"SET %s%d %s", self->key_str->str, msgcounter, self->value_str->str);
       
       msg_debug("REDIS result",
                 evt_tag_str("key", self->key_str->str),
                 evt_tag_str("value", self->value_str->str),
-                NULL);      
+                NULL);
+      success = TRUE;
+      /*
+      reply = redisCommand(self->c,"publish messages %s", self->value_str->str);
+      reply = redisCommand(self->c,"publish %s %s", self->key_str->str, self->value_str->str);
+      if ( reply->integer )
+      {
+	msg_debug("published to",
+		  evt_tag_str("channel", self->key_str->str),
+		  evt_tag_str("value", self->value_str->str),
+		  NULL);
+      }
+      else
+	msg_debug("no subscribed client on the following channel",
+		  evt_tag_str("channel", self->key_str->str),
+		  NULL);
+	*/
+      freeReplyObject(reply);      
+      
     }   
   
   msg_set_context(NULL);
@@ -242,19 +278,10 @@ afredis_worker_thread(gpointer arg)
   self->str = g_string_sized_new(1024);
   self->key_str = g_string_sized_new(1024);
   self->value_str = g_string_sized_new(1024);
-
-  self->c = redisConnect(self->host, self->port);
-  if (self->c->err)
-  {
-      printf("Connection error: %s\n", self->c->errstr);
-      msg_error("REDIS server error, suspending",
-                evt_tag_str("Connection error:", self->c->errstr),
-                evt_tag_int("time_reopen", self->time_reopen),
-                NULL);
-      
-      //afredis_dd_suspend(self);
-  }
-  else
+  
+  afredis_dd_connect(self, FALSE);
+  
+  if ( !(self->c->err) )
   {
     reply = redisCommand(self->c,"PING");
   
@@ -408,9 +435,6 @@ afredis_dd_free(LogPipe *d)
   log_template_unref(self->value_tmpl);
   g_free(self->key);
   g_free(self->value);
-  g_string_free(self->str, TRUE);
-  g_string_free(self->key_str, TRUE);
-  g_string_free(self->value_str, TRUE);
 
   log_dest_driver_free(d);
 }
