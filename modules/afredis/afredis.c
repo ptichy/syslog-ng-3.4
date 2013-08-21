@@ -433,8 +433,8 @@ afredis_dd_free(LogPipe *d)
   
   log_template_unref(self->key_tmpl);
   log_template_unref(self->value_tmpl);
-  g_free(self->key);
-  g_free(self->value);
+  if ( !self->key_tmpl ) g_free(self->key);
+  if ( !self->value_tmpl ) g_free(self->value);
 
   log_dest_driver_free(d);
 }
