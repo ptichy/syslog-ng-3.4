@@ -222,6 +222,7 @@ afredis_worker_insert(AFREDISDriver *self)
       /*
       reply = redisCommand(self->c,"publish messages %s", self->value_str->str);
       reply = redisCommand(self->c,"publish %s %s", self->key_str->str, self->value_str->str);
+            
       if ( reply->integer )
       {
 	msg_debug("published to",
@@ -402,7 +403,21 @@ static gboolean
 afredis_dd_deinit(LogPipe *s)
 {
   AFREDISDriver *self = (AFREDISDriver *)s;
-
+  redisReply *reply;
+  
+  reply = redisCommand(self->c, "save");
+  
+  if ( self->c->err )
+    msg_error("Can't save the DB",
+              evt_tag_str("error", self->c->errstr),              
+              NULL);
+  else
+    msg_verbose("save DB",
+	      evt_tag_str("save", reply->str),
+	      NULL);
+  
+  freeReplyObject(reply);
+    
   afredis_dd_stop_thread(self);
   log_queue_reset_parallel_push(self->queue);
 
