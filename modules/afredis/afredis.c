@@ -412,11 +412,12 @@ afredis_dd_deinit(LogPipe *s)
               evt_tag_str("error", self->c->errstr),              
               NULL);
   else
+  {
     msg_verbose("save DB",
 	      evt_tag_str("save", reply->str),
 	      NULL);
-  
-  freeReplyObject(reply);
+    freeReplyObject(reply);
+  }
     
   afredis_dd_stop_thread(self);
   log_queue_reset_parallel_push(self->queue);
