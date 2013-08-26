@@ -46,9 +46,11 @@ typedef struct
   gint port;
   
   redisContext *c;   
-    
+  
+  gchar *command;
   gchar *key;
-  gchar *value;
+  gchar *value;  
+    
   GString *key_str;
   GString *value_str;
 
@@ -123,6 +125,20 @@ void afredis_dd_set_value(LogDriver *d, const gchar *value)
 {
   AFREDISDriver *self = (AFREDISDriver *)d;
 
+  g_free(self->value);
+  self->value = g_strdup(value);
+}
+
+void afredis_dd_set_command(LogDriver *d, const gchar *command, const gchar *key, const gchar *value)
+{
+  AFREDISDriver *self = (AFREDISDriver *)d;
+
+  g_free(self->command);
+  self->command = g_strdup(command);
+  
+  g_free(self->key);
+  self->key = g_strdup(key);
+  
   g_free(self->value);
   self->value = g_strdup(value);
 }
@@ -203,16 +219,15 @@ afredis_worker_insert(AFREDISDriver *self)
     
   log_template_format(self->value_tmpl, msg, NULL, LTZ_SEND,
                              self->seq_num, NULL, self->value_str);
-  
-  msgcounter++;    
-      
+        
   if (self->c->err)
     {          
       success = FALSE;
     }
   else
     { 
-      reply = redisCommand(self->c,"SET %s%d %s", self->key_str->str, msgcounter, self->value_str->str);
+      msgcounter++;
+      reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgcounter, self->value_str->str);
       
       msg_debug("REDIS result",
                 evt_tag_str("key", self->key_str->str),
@@ -384,7 +399,7 @@ afredis_dd_init(LogPipe *s)
       self->value_tmpl = log_template_new(cfg, "value");
       log_template_compile(self->value_tmpl, self->value, NULL);
     }
-  
+    
   stats_lock();
   stats_register_counter(0, SCS_REDIS | SCS_DESTINATION, self->super.super.id,
                          afredis_dd_format_stats_instance(self),
@@ -404,6 +419,9 @@ afredis_dd_deinit(LogPipe *s)
 {
   AFREDISDriver *self = (AFREDISDriver *)s;
   redisReply *reply;
+    
+  afredis_dd_stop_thread(self);
+  log_queue_reset_parallel_push(self->queue);
   
   reply = redisCommand(self->c, "save");
   
@@ -417,10 +435,7 @@ afredis_dd_deinit(LogPipe *s)
 	      evt_tag_str("save", reply->str),
 	      NULL);
     freeReplyObject(reply);
-  }
-    
-  afredis_dd_stop_thread(self);
-  log_queue_reset_parallel_push(self->queue);
+  }  
 
   stats_lock();
   stats_unregister_counter(SCS_REDIS | SCS_DESTINATION, self->super.super.id,
