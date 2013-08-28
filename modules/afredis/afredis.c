@@ -470,6 +470,7 @@ afredis_dd_free(LogPipe *d)
   log_template_unref(self->value_tmpl);
   if ( !self->key_tmpl ) g_free(self->key);
   if ( !self->value_tmpl ) g_free(self->value);
+  if ( !self->command ) g_free(self->command);
 
   log_dest_driver_free(d);
 }
