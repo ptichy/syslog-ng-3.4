@@ -237,8 +237,8 @@ afredis_worker_insert(AFREDISDriver *self)
   else
     { 
       msgCounter++;
-      reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgCounter, self->value_str->str);
-      //reply = redisCommand(self->c,"%s %s %s", self->command, self->key_str->str, self->value_str->str);
+      //reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgCounter, self->value_str->str);
+      reply = redisCommand(self->c,"%s %s %s", self->command, self->key_str->str, self->value_str->str);
       
       msg_debug("REDIS result",
                 evt_tag_str("key", self->key_str->str),
