@@ -33,8 +33,9 @@
 
 #include "hiredis/hiredis.h"
 #include "driver.h"
-static int msgcounter = 0;
 
+
+static int msgCounter = 0;
 
 typedef struct
 {
@@ -219,15 +220,17 @@ afredis_worker_insert(AFREDISDriver *self)
     
   log_template_format(self->value_tmpl, msg, NULL, LTZ_SEND,
                              self->seq_num, NULL, self->value_str);
-        
+  
+  if ( !self->command ) self->command = g_strdup("set");
+  
   if (self->c->err)
     {          
       success = FALSE;
     }
   else
     { 
-      msgcounter++;
-      reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgcounter, self->value_str->str);
+      msgCounter++;
+      reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgCounter, self->value_str->str);
       
       msg_debug("REDIS result",
                 evt_tag_str("key", self->key_str->str),
