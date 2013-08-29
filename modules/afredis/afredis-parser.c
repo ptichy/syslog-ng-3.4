@@ -34,6 +34,7 @@ static CfgLexerKeyword afredis_keywords[] = {
   { "port",			KW_PORT },
   { "key",			KW_KEY },
   { "value",			KW_VALUE },
+  { "command",			KW_COMMAND },  
   { NULL }
 };
 
