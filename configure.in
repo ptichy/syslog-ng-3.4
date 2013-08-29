@@ -894,8 +894,14 @@ if test "x$enable_redis" != "xno" && test "x$with_redis" != "no"; then
 			HIREDIS_CFLAGS="`pkg-config --cflags hiredis`"
 			HIREDIS_LIBS="`pkg-config --libs hiredis`"
 		else
-			AC_MSG_RESULT(no)
-			hiredis=no
+			PKG_CHECK_EXISTS(libhiredis, [hiredis=yes], [hiredis=no])
+			if test "x$hiredis" = "xyes"; then
+				AC_MSG_RESULT(yes)
+				HIREDIS_CFLAGS="`pkg-config --cflags libhiredis`"
+				HIREDIS_LIBS="`pkg-config --libs libhiredis`"
+			else
+				AC_MSG_RESULT(no)
+			fi
 		fi	
 	fi
 	if test "x$enable_redis" = "xyes" && test "x$hiredis" = "xno"; then
