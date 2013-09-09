@@ -22,6 +22,7 @@
  */
 
 #include <signal.h>
+#include <ctype.h>
 
 #include "afredis.h"
 #include "afredis-parser.h"
@@ -79,18 +80,6 @@ typedef struct
   GString *str;
 } AFREDISDriver;
 
-static gchar *
-afredis_wash_string (gchar *str)
-{
-  gint i;
-
-  for (i = 0; i < strlen (str); i++)
-    if (str[i] == '\n' ||
-        str[i] == '\r')
-      str[i] = ' ';
-
-  return str;
-}
 
 /*
  * Configuration
@@ -141,7 +130,8 @@ void afredis_dd_set_command(LogDriver *d, const gchar *command, const gchar *key
   self->key = g_strdup(key);
   
   g_free(self->value);
-  self->value = g_strdup(value);
+  if ( value == NULL ) self->value = g_strdup("NULL");
+    else g_strdup(value);
 }
 
 /*
@@ -228,7 +218,12 @@ afredis_worker_insert(AFREDISDriver *self)
   log_template_format(self->value_tmpl, msg, NULL, LTZ_SEND,
                              self->seq_num, NULL, self->value_str);
   
-  if ( !self->command ) self->command = g_strdup("set");
+  if ( self->command )
+  {
+    for ( int i = 0; i < strlen(self->command); i++ ) self->command[i] = tolower(self->command[i]);
+  }
+    else
+      self->command = g_strdup("set");
   
   if (self->c->err)
     {          
@@ -240,27 +235,30 @@ afredis_worker_insert(AFREDISDriver *self)
       //reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgCounter, self->value_str->str);
       reply = redisCommand(self->c,"%s %s %s", self->command, self->key_str->str, self->value_str->str);
       
-      msg_debug("REDIS result",
-                evt_tag_str("key", self->key_str->str),
-                evt_tag_str("value", self->value_str->str),
-                NULL);
-      success = TRUE;
-      /*
-      reply = redisCommand(self->c,"publish messages %s", self->value_str->str);
-      reply = redisCommand(self->c,"publish %s %s", self->key_str->str, self->value_str->str);
-            
-      if ( reply->integer )
+      if ( !strcmp(self->command, "set") )
       {
-	msg_debug("published to",
-		  evt_tag_str("channel", self->key_str->str),
+	msg_debug("REDIS result",
+		  evt_tag_str("key", self->key_str->str),
 		  evt_tag_str("value", self->value_str->str),
 		  NULL);
       }
-      else
-	msg_debug("no subscribed client on the following channel",
+	else if ( !strcmp(self->command, "publish") )
+	{
+	    if ( reply->integer )
+	    {
+	      msg_debug("published to",
+		  evt_tag_str("channel", self->key_str->str),
+		  evt_tag_str("value", self->value_str->str),
+		  NULL);
+	    }
+	    else
+	      msg_debug("no subscribed client on the following channel",
 		  evt_tag_str("channel", self->key_str->str),
 		  NULL);
-	*/
+	}
+	
+      success = TRUE;        
+      	
       freeReplyObject(reply);      
       
     }   
@@ -306,19 +304,7 @@ afredis_worker_thread(gpointer arg)
   self->key_str = g_string_sized_new(1024);
   self->value_str = g_string_sized_new(1024);
   
-  afredis_dd_connect(self, FALSE);
-  
-  if ( !(self->c->err) )
-  {
-    reply = redisCommand(self->c,"PING");
-  
-    msg_verbose("PING REDIS",
-	      evt_tag_str("PING:", reply->str),              
-	      NULL);    
-    
-    reply = redisCommand(self->c,"SET %s %s", "testkey", "testmessage");
-    freeReplyObject(reply);
-  } 
+  afredis_dd_connect(self, FALSE);   
   
   while (!self->writer_thread_terminate)
     {
@@ -386,7 +372,10 @@ afredis_dd_init(LogPipe *s)
 {
   AFREDISDriver *self = (AFREDISDriver *)s;
   GlobalConfig *cfg = log_pipe_get_config(s);
-
+ 
+  if (!log_dest_driver_init_method(s))
+    return FALSE;
+  
   if (cfg)
     self->time_reopen = cfg->time_reopen;
 
@@ -397,14 +386,14 @@ afredis_dd_init(LogPipe *s)
 
   self->queue = log_dest_driver_acquire_queue(&self->super, afredis_dd_format_stats_instance(self));
  
-  if (!self->key) self->key = "$PROGRAM";
+  if (!self->key) self->key = g_strdup("$PROGRAM");
   if (!self->key_tmpl)
     {
 	self->key_tmpl = log_template_new(cfg, "key");
 	log_template_compile(self->key_tmpl, self->key, NULL);
     }
     
-  if (!self->value) self->value = "$MSG";
+  if (!self->value) self->value = g_strdup("$MSG");
   if (!self->value_tmpl)
     {
       self->value_tmpl = log_template_new(cfg, "value");
@@ -420,6 +409,7 @@ afredis_dd_init(LogPipe *s)
                          SC_TYPE_DROPPED, &self->dropped_messages);
   stats_unlock();
 
+  log_queue_set_counters(self->queue, self->stored_messages, self->dropped_messages);
   afredis_dd_start_thread(self);
 
   return TRUE;
@@ -434,20 +424,7 @@ afredis_dd_deinit(LogPipe *s)
   afredis_dd_stop_thread(self);
   log_queue_reset_parallel_push(self->queue);
   
-  reply = redisCommand(self->c, "save");
-  
-  if ( self->c->err )
-    msg_error("Can't save the DB",
-              evt_tag_str("error", self->c->errstr),              
-              NULL);
-  else
-  {
-    msg_verbose("save DB",
-	      evt_tag_str("save", reply->str),
-	      NULL);
-    freeReplyObject(reply);
-  }  
-
+  log_queue_set_counters(self->queue, NULL, NULL);
   stats_lock();
   stats_unregister_counter(SCS_REDIS | SCS_DESTINATION, self->super.super.id,
                            afredis_dd_format_stats_instance(self),
@@ -457,6 +434,9 @@ afredis_dd_deinit(LogPipe *s)
                            SC_TYPE_DROPPED, &self->dropped_messages);
   stats_unlock();
 
+  if (!log_dest_driver_deinit_method(s))
+    return FALSE;
+  
   return TRUE;
 }
 
@@ -475,9 +455,10 @@ afredis_dd_free(LogPipe *d)
   
   log_template_unref(self->key_tmpl);
   log_template_unref(self->value_tmpl);
-  if ( !self->key_tmpl ) g_free(self->key);
-  if ( !self->value_tmpl ) g_free(self->value);
-  if ( !self->command ) g_free(self->command);
+  redisFree(self->c);
+  g_free(self->key);
+  g_free(self->value);
+  g_free(self->command);
 
   log_dest_driver_free(d);
 }
