@@ -8,12 +8,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
  *
  * As an additional exemption you are allowed to compile & link against the
  * OpenSSL libraries as published by the OpenSSL project. See the file
@@ -48,7 +48,8 @@ extern LogDriver *last_driver;
 %token KW_REDIS
 %token KW_KEY
 %token KW_VALUE
-%token KW_COMMAND
+%token KW_COMMAND2
+%token KW_COMMAND3
 
 %%
 
@@ -57,21 +58,22 @@ start
           {
             last_driver = *instance = afredis_dd_new();
           }
-          '(' afredis_options ')'         { YYACCEPT; }
-	;
+          '(' afredis_options ')' { YYACCEPT; }
+;
 
 afredis_options
         : afredis_option afredis_options
-	|
-	;
+|
+;
 
 afredis_option
-        : KW_HOST '(' string ')'		{ afredis_dd_set_host(last_driver, $3); free($3); }
-        | KW_PORT '(' LL_NUMBER ')'		{ afredis_dd_set_port(last_driver, $3); }
-	| KW_KEY '(' string ')'		 	{ afredis_dd_set_key(last_driver, $3); free($3); }
-	| KW_VALUE '(' string ')'		{ afredis_dd_set_value(last_driver, $3); free($3); }		
-	| KW_COMMAND '(' string string string')'{ afredis_dd_set_command(last_driver, $3, $4, $5); free($3); free($4); free($5); }
-	
+        : KW_HOST '(' string ')' { afredis_dd_set_host(last_driver, $3); free($3); }
+        | KW_PORT '(' LL_NUMBER ')' { afredis_dd_set_port(last_driver, $3); }
+	| KW_KEY '(' string ')' { afredis_dd_set_key(last_driver, $3); free($3); }
+	| KW_VALUE '(' string ')' { afredis_dd_set_value(last_driver, $3); free($3); }
+	| KW_COMMAND2 '(' string string ')'{ afredis_dd_set_command(last_driver, $3, $4, NULL); free($3); free($4); }
+	| KW_COMMAND3 '(' string string string ')'{ afredis_dd_set_command(last_driver, $3, $4, $5); free($3); free($4); free($5); }
+
         | dest_driver_option
         ;
 
