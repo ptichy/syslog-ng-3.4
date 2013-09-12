@@ -36,8 +36,6 @@
 #include "driver.h"
 
 
-static int msgCounter = 0;
-
 typedef struct
 {
   LogDestDriver super;
@@ -52,8 +50,7 @@ typedef struct
   gchar *command;
   gchar *key;
   gchar *value;
-  gchar *value_2;
-  gboolean value_det;
+  gchar *value_2; 
     
   GString *key_str;
   GString *value_str;  
@@ -118,19 +115,7 @@ void afredis_dd_set_command(LogDriver *d, const gchar *command, const gchar *key
   self->value = g_strdup(value);
   
   g_free(self->value_2);  
-  self->value_2 = g_strdup(value_2); 
-  
-    
-  printf("\n---------parameter-from-config-------------\n");
-  printf("command: %s, key: %s, value: %s, value_2: %s\n", command, key, value, value_2);
-  if ( value == NULL ) printf("parameter value NULL!\n");
-  printf("\n-------------------------------------------\n");
-  
-  printf("\n---------parameter-from-self-------------\n");
-  if ( self->value == NULL ) printf("self->value NULL!\n");
-  printf("command: %s, key: %s, value: %s, value_2: %s\n", self->command, self->key, self->value, self->value_2);
-  printf("\n-------------------------------------------\n");
-
+  self->value_2 = g_strdup(value_2);
 }
 
 
@@ -191,15 +176,16 @@ afredis_dd_connect(AFREDISDriver *self, gboolean reconnect)
  * Worker thread
  */ 
 
+#define maybe_space(x) (((x) && (*x)) ? " " : "")
+#define maybe_str(x) (((x) && (*x)) ? (x) : "")
+
 static gboolean
 afredis_worker_insert(AFREDISDriver *self)
 {
   gboolean success;
   LogMessage *msg;
   LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
-  redisReply *reply;
-  
-  //gpointer args[] = { self, NULL, NULL };
+  redisReply *reply;  
 
   afredis_dd_connect(self, TRUE);
   
@@ -225,62 +211,42 @@ afredis_worker_insert(AFREDISDriver *self)
     }
   else
     { 
-      msgCounter++;
-      //reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgCounter, self->value_str->str);     
+      gchar *tmp;
       
-      printf("---------------------------\n");
-      printf("command: %s\n", self->command);
-      printf("key: %s\nvalue: %s\nvalue_2: %s\n value_det:%d\n", self->key, self->value, self->value_2, self->value_det);
-      printf("key_str: %s\nvalue_str: %s\n", self->key_str->str, self->value_str->str);
-      printf("---------------------------\n");
+      tmp = g_strdup_printf ("%s %s%s%s%s%s", self->command, self->key_str->str,
+			   maybe_space(self->value_str->str), maybe_str(self->value_str->str),
+			   maybe_space(self->value_2), maybe_str(self->value_2));
       
-	if ( !self->value_2 )      
+      fprintf(stderr, "DEBUG: |%s|; %s; %s\n", tmp, self->value_str->str, self->value_2);
+      reply = redisCommand(self->c, tmp); // "%s %s%s%s%s%s", self->command, self->key_str->str,
+			   //maybe_space(self->value_str->str), maybe_str(self->value_str->str),
+			   //maybe_space(self->value_2), maybe_str(self->value_2));
+      
+      g_free (tmp);
+      
+      /*
+      if ( !self->value_2 )      
 	if ( !self->value )
 	{
 	  reply = redisCommand(self->c,"%s %s", self->command, self->key_str->str);
-	  printf("---------------rediscommand-called------\n");
-	  printf("%s redisCommand called with 2 parameter\n", self->command);
-	  printf("-------------------------------------\n");
 	}
 	else
 	{
 	  reply = redisCommand(self->c,"%s %s %s", self->command, self->key_str->str, self->value_str->str);
-	  printf("---------------rediscommand-called------\n");
-	  printf("%s redisCommand called with 3 parameter\n", self->command);
-	  printf("-------------------------------------\n");
 	}
       else
       {
 	reply = redisCommand(self->c,"%s %s %s %s", self->command, self->key_str->str, self->value_str->str, self->value_2);
-	printf("---------------rediscommand-called------\n");
-	printf("%s redisCommand called with 4 parameter\n", self->command);
-	printf("-------------------------------------\n");
       }
+      */
       
-      /*  
-      if ( !strcmp(self->command, "set") )
-      {
-	msg_debug("REDIS result",
+      msg_debug("REDIS result",
+		  evt_tag_str("command", self->command),
 		  evt_tag_str("key", self->key_str->str),
 		  evt_tag_str("value", self->value_str->str),
+		  evt_tag_str("value_2", self->value_2),
 		  NULL);
-      }
       
-      if ( !strcmp(self->command, "publish") )
-      {
-	if ( reply->integer )
-	{
-	  msg_debug("published to",
-	  evt_tag_str("channel", self->key_str->str),
-	  evt_tag_str("value", self->value_str->str),
-	  NULL);
-	}
-	else
-	  msg_debug("no subscribed client on the following channel",
-	  evt_tag_str("channel", self->key_str->str),
-	  NULL);
-	}
-	*/
       success = TRUE;        
       	
       freeReplyObject(reply);      
@@ -484,6 +450,7 @@ afredis_dd_free(LogPipe *d)
   redisFree(self->c);
   g_free(self->key);
   g_free(self->value);
+  g_free(self->value_2);
   g_free(self->command);
 
   log_dest_driver_free(d);
@@ -522,8 +489,7 @@ afredis_dd_new(void)
   self->super.super.super.free_fn = afredis_dd_free;
 
   afredis_dd_set_host((LogDriver *)self, "127.0.0.1");
-  afredis_dd_set_port((LogDriver *)self, 6379);
-  self->value_det = FALSE;
+  afredis_dd_set_port((LogDriver *)self, 6379);  
   
   init_sequence_number(&self->seq_num);
 
