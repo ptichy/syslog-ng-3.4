@@ -51,10 +51,12 @@ typedef struct
   
   gchar *command;
   gchar *key;
-  gchar *value;  
+  gchar *value;
+  gchar *value_2;
+  gboolean value_det;
     
   GString *key_str;
-  GString *value_str;
+  GString *value_str;  
 
   time_t time_reopen;
 
@@ -102,24 +104,7 @@ afredis_dd_set_port(LogDriver *d, gint port)
   self->port = (int)port;
 }
 
-void
-afredis_dd_set_key(LogDriver *d, const gchar *key)
-{
-  AFREDISDriver *self = (AFREDISDriver *)d;
-
-  g_free(self->key);
-  self->key = g_strdup(key);
-}
-
-void afredis_dd_set_value(LogDriver *d, const gchar *value)
-{
-  AFREDISDriver *self = (AFREDISDriver *)d;
-
-  g_free(self->value);
-  self->value = g_strdup(value);
-}
-
-void afredis_dd_set_command(LogDriver *d, const gchar *command, const gchar *key, const gchar *value)
+void afredis_dd_set_command(LogDriver *d, const gchar *command, const gchar *key, const gchar *value, const gchar *value_2)
 {
   AFREDISDriver *self = (AFREDISDriver *)d;
 
@@ -129,10 +114,25 @@ void afredis_dd_set_command(LogDriver *d, const gchar *command, const gchar *key
   g_free(self->key);
   self->key = g_strdup(key);
   
-  g_free(self->value);
-  if ( value == NULL ) self->value = g_strdup("NULL");
-    else g_strdup(value);
+  g_free(self->value);  
+  self->value = g_strdup(value);
+  
+  g_free(self->value_2);  
+  self->value_2 = g_strdup(value_2); 
+  
+    
+  printf("\n---------parameter-from-config-------------\n");
+  printf("command: %s, key: %s, value: %s, value_2: %s\n", command, key, value, value_2);
+  if ( value == NULL ) printf("parameter value NULL!\n");
+  printf("\n-------------------------------------------\n");
+  
+  printf("\n---------parameter-from-self-------------\n");
+  if ( self->value == NULL ) printf("self->value NULL!\n");
+  printf("command: %s, key: %s, value: %s, value_2: %s\n", self->command, self->key, self->value, self->value_2);
+  printf("\n-------------------------------------------\n");
+
 }
+
 
 /*
  * Utilities
@@ -199,7 +199,7 @@ afredis_worker_insert(AFREDISDriver *self)
   LogPathOptions path_options = LOG_PATH_OPTIONS_INIT;
   redisReply *reply;
   
-  gpointer args[] = { self, NULL, NULL };
+  //gpointer args[] = { self, NULL, NULL };
 
   afredis_dd_connect(self, TRUE);
   
@@ -215,15 +215,9 @@ afredis_worker_insert(AFREDISDriver *self)
   log_template_format(self->key_tmpl, msg, NULL, LTZ_SEND,
 		      self->seq_num, NULL, self->key_str); 
     
-  log_template_format(self->value_tmpl, msg, NULL, LTZ_SEND,
-                             self->seq_num, NULL, self->value_str);
-  
-  if ( self->command )
-  {
-    for ( int i = 0; i < strlen(self->command); i++ ) self->command[i] = tolower(self->command[i]);
-  }
-    else
-      self->command = g_strdup("set");
+  if (self->value_tmpl)
+    log_template_format(self->value_tmpl, msg, NULL, LTZ_SEND,
+                               self->seq_num, NULL, self->value_str);
   
   if (self->c->err)
     {          
@@ -232,9 +226,38 @@ afredis_worker_insert(AFREDISDriver *self)
   else
     { 
       msgCounter++;
-      //reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgCounter, self->value_str->str);
-      reply = redisCommand(self->c,"%s %s %s", self->command, self->key_str->str, self->value_str->str);
+      //reply = redisCommand(self->c,"%s %s%d %s", self->command, self->key_str->str, msgCounter, self->value_str->str);     
       
+      printf("---------------------------\n");
+      printf("command: %s\n", self->command);
+      printf("key: %s\nvalue: %s\nvalue_2: %s\n value_det:%d\n", self->key, self->value, self->value_2, self->value_det);
+      printf("key_str: %s\nvalue_str: %s\n", self->key_str->str, self->value_str->str);
+      printf("---------------------------\n");
+      
+	if ( !self->value_2 )      
+	if ( !self->value )
+	{
+	  reply = redisCommand(self->c,"%s %s", self->command, self->key_str->str);
+	  printf("---------------rediscommand-called------\n");
+	  printf("%s redisCommand called with 2 parameter\n", self->command);
+	  printf("-------------------------------------\n");
+	}
+	else
+	{
+	  reply = redisCommand(self->c,"%s %s %s", self->command, self->key_str->str, self->value_str->str);
+	  printf("---------------rediscommand-called------\n");
+	  printf("%s redisCommand called with 3 parameter\n", self->command);
+	  printf("-------------------------------------\n");
+	}
+      else
+      {
+	reply = redisCommand(self->c,"%s %s %s %s", self->command, self->key_str->str, self->value_str->str, self->value_2);
+	printf("---------------rediscommand-called------\n");
+	printf("%s redisCommand called with 4 parameter\n", self->command);
+	printf("-------------------------------------\n");
+      }
+      
+      /*  
       if ( !strcmp(self->command, "set") )
       {
 	msg_debug("REDIS result",
@@ -242,21 +265,22 @@ afredis_worker_insert(AFREDISDriver *self)
 		  evt_tag_str("value", self->value_str->str),
 		  NULL);
       }
-	else if ( !strcmp(self->command, "publish") )
+      
+      if ( !strcmp(self->command, "publish") )
+      {
+	if ( reply->integer )
 	{
-	    if ( reply->integer )
-	    {
-	      msg_debug("published to",
-		  evt_tag_str("channel", self->key_str->str),
-		  evt_tag_str("value", self->value_str->str),
-		  NULL);
-	    }
-	    else
-	      msg_debug("no subscribed client on the following channel",
-		  evt_tag_str("channel", self->key_str->str),
-		  NULL);
+	  msg_debug("published to",
+	  evt_tag_str("channel", self->key_str->str),
+	  evt_tag_str("value", self->value_str->str),
+	  NULL);
 	}
-	
+	else
+	  msg_debug("no subscribed client on the following channel",
+	  evt_tag_str("channel", self->key_str->str),
+	  NULL);
+	}
+	*/
       success = TRUE;        
       	
       freeReplyObject(reply);      
@@ -302,7 +326,7 @@ afredis_worker_thread(gpointer arg)
 
   self->str = g_string_sized_new(1024);
   self->key_str = g_string_sized_new(1024);
-  self->value_str = g_string_sized_new(1024);
+  self->value_str = g_string_sized_new(1024);  
   
   afredis_dd_connect(self, FALSE);   
   
@@ -338,7 +362,7 @@ afredis_worker_thread(gpointer arg)
 
   g_string_free(self->str, TRUE);
   g_string_free(self->key_str, TRUE);
-  g_string_free(self->value_str, TRUE);
+  g_string_free(self->value_str, TRUE);  
 
   msg_debug("Worker thread finished",
             evt_tag_str("driver", self->super.super.id),
@@ -386,6 +410,9 @@ afredis_dd_init(LogPipe *s)
 
   self->queue = log_dest_driver_acquire_queue(&self->super, afredis_dd_format_stats_instance(self));
  
+  if (!self->command)
+    self->command = g_strdup("set");
+  
   if (!self->key) self->key = g_strdup("$PROGRAM");
   if (!self->key_tmpl)
     {
@@ -393,8 +420,7 @@ afredis_dd_init(LogPipe *s)
 	log_template_compile(self->key_tmpl, self->key, NULL);
     }
     
-  if (!self->value) self->value = g_strdup("$MSG");
-  if (!self->value_tmpl)
+  if (self->value && !self->value_tmpl)
     {
       self->value_tmpl = log_template_new(cfg, "value");
       log_template_compile(self->value_tmpl, self->value, NULL);
@@ -497,6 +523,7 @@ afredis_dd_new(void)
 
   afredis_dd_set_host((LogDriver *)self, "127.0.0.1");
   afredis_dd_set_port((LogDriver *)self, 6379);
+  self->value_det = FALSE;
   
   init_sequence_number(&self->seq_num);
 

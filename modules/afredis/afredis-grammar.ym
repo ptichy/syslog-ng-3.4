@@ -48,9 +48,8 @@ extern LogDriver *last_driver;
 %token KW_REDIS
 %token KW_KEY
 %token KW_VALUE
-%token KW_COMMAND2
-%token KW_COMMAND3
-
+%token KW_COMMAND
+%token KW_SET
 %%
 
 start
@@ -69,11 +68,12 @@ afredis_options
 afredis_option
         : KW_HOST '(' string ')' { afredis_dd_set_host(last_driver, $3); free($3); }
         | KW_PORT '(' LL_NUMBER ')' { afredis_dd_set_port(last_driver, $3); }
-	| KW_KEY '(' string ')' { afredis_dd_set_key(last_driver, $3); free($3); }
-	| KW_VALUE '(' string ')' { afredis_dd_set_value(last_driver, $3); free($3); }
-	| KW_COMMAND2 '(' string string ')'{ afredis_dd_set_command(last_driver, $3, $4, NULL); free($3); free($4); }
-	| KW_COMMAND3 '(' string string string ')'{ afredis_dd_set_command(last_driver, $3, $4, $5); free($3); free($4); free($5); }
-
+	| KW_COMMAND '(' string string ')'{ afredis_dd_set_command(last_driver, $3, $4, NULL, NULL); free($3); free($4); }
+	| KW_COMMAND '(' string string string ')'{ afredis_dd_set_command(last_driver, $3, $4, $5, NULL); free($3); free($4); free($5); }
+	| KW_COMMAND '(' string string string string ')'{ afredis_dd_set_command(last_driver, $3, $4, $5, $6); free($3); free($4); free($5); free($6); }
+	| KW_SET '(' string ')' { afredis_dd_set_command(last_driver, "SET", "$MSG", $3, NULL); free($3); }
+	| KW_SET '(' string string ')' { afredis_dd_set_command(last_driver, "SET", $3, $4, NULL); free($3); free($4); }
+	
         | dest_driver_option
         ;
 

@@ -31,11 +31,9 @@ int afredis_parse(CfgLexer *lexer, LogDriver **instance, gpointer arg);
 static CfgLexerKeyword afredis_keywords[] = {
   { "redis",			KW_REDIS },
   { "host",			KW_HOST },
-  { "port",			KW_PORT },
-  { "key",			KW_KEY },
-  { "value",			KW_VALUE },
-  { "command2",			KW_COMMAND2 },
-  { "command3",			KW_COMMAND3 },  
+  { "port",			KW_PORT },  
+  { "command",			KW_COMMAND },
+  { "set",			KW_SET },  
   { NULL }
 };
 
