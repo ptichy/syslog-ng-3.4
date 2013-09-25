@@ -210,24 +210,7 @@ afredis_worker_insert(AFREDISDriver *self)
       success = FALSE;
     }
   else
-    { /*
-      gchar *tmp;
-      
-      tmp = g_strdup_printf ("%s %s%s%s%s%s", self->command, self->key_str->str,
-			   maybe_space(self->value_str->str), maybe_str(self->value_str->str),
-			   maybe_space(self->value_2), maybe_str(self->value_2));
-      
-      fprintf(stderr, "DEBUG: |%s|; %s; %s\n", tmp, self->value_str->str, self->value_2);
-      reply = redisCommand(self->c, tmp); // "%s %s%s%s%s%s", self->command, self->key_str->str,
-			   //maybe_space(self->value_str->str), maybe_str(self->value_str->str),
-			   //maybe_space(self->value_2), maybe_str(self->value_2));
-      reply = redisCommand(self->c, "%s %s%s%s%s%s", self->command, self->key_str->str,
-			   maybe_space(self->value_str->str), maybe_str(self->value_str->str),
-			   maybe_space(self->value_2), maybe_str(self->value_2)); 
-      g_free (tmp); */
-      printf("-------------------------\n");
-      printf("error: %d c->errstr: %s\n", self->c->err, self->c->errstr);
-      
+    {       
       if ( !self->value_2 )      
 	if ( !self->value )
 	{
@@ -240,8 +223,7 @@ afredis_worker_insert(AFREDISDriver *self)
       else
       {
 	reply = redisCommand(self->c,"%s %s %s %s", self->command, self->key_str->str, self->value_str->str, self->value_2);
-      }
-      
+      }      
       
       msg_debug("REDIS result",
 		  evt_tag_str("command", self->command),
